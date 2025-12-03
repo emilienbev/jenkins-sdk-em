@@ -25,21 +25,25 @@ class BuildDockerDotNetPerformer {
                 }
             }
             if (!onlySource) {
-                var dockerfile = "Dockerfile_NET8"
-                if (build instanceof HasVersion && build.implementationVersion().isBelow(ImplementationVersion.from("3.4.14"))){
-                    dockerfile = "Dockerfile_NET6"
+                var dotnetVersion = "10.0"
+                if (build instanceof HasVersion && build.implementationVersion().isBelow(ImplementationVersion.from("3.8.2"))){
+                    dotnetVersion = "8.0"
                 }
+                else if (build instanceof HasVersion && build.implementationVersion().isBelow(ImplementationVersion.from("3.4.14"))){
+                    dotnetVersion = "6.0"
+                }
+
                 if (build instanceof BuildMain) {
-                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/$dockerfile -t $imageName .", false, true, true)
+                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/Dockerfile -t $imageName --build-arg FIT_DOTNET_VERSION=$dotnetVersion .", false, true, true)
                 }
                 else if (build instanceof BuildGerrit) {
-                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/$dockerfile -t $imageName --build-arg BUILD_GERRIT=${build.gerrit()} .", false, true, true)
+                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/Dockerfile -t $imageName --build-arg FIT_DOTNET_VERSION=$dotnetVersion --build-arg BUILD_GERRIT=${build.gerrit()} .", false, true, true)
                 }
                 else if (build instanceof HasSha) {
-                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/$dockerfile -t $imageName --build-arg SDK_BRANCH=${build.sha()} .", false, true, true)
+                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/Dockerfile -t $imageName --build-arg FIT_DOTNET_VERSION=$dotnetVersion --build-arg SDK_BRANCH=${build.sha()} .", false, true, true)
                 }
                 else if (build instanceof HasVersion) {
-                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/$dockerfile -t $imageName --build-arg SDK_BRANCH=tags/${build.version()} .", false, true, true)
+                    imp.execute("docker build -f transactions-fit-performer/performers/dotnet/Couchbase.Transactions.FitPerformer/Dockerfile -t $imageName --build-arg FIT_DOTNET_VERSION=$dotnetVersion --build-arg SDK_BRANCH=tags/${build.version()} .", false, true, true)
                 }
             }
         }

@@ -5,34 +5,34 @@ import groovy.transform.Memoized
 
 
 class JVMVersions {
+    private static final String SNAPSHOT_REPO_BASE = "https://central.sonatype.com/repository/maven-snapshots"
+
     @Memoized
     static ImplementationVersion getLatestSnapshotBuild(String client) {
-        def host = "s01.oss.sonatype.org"
-        def snapshots = null
-        try {
-            snapshots = NetworkUtil.readXml("https://${host}/content/repositories/snapshots/com/couchbase/client/${client}/maven-metadata.xml")
-        }
-        catch (Throwable err) {
-            throw new RuntimeException("Unable to fetch snapshot metadata for ${client} from https://${host}", err)
+        return fetchSnapshot(client)
+    }
+
+    private static ImplementationVersion fetchSnapshot(String client) {
+        def snapshots = NetworkUtil.readXml("${SNAPSHOT_REPO_BASE}/com/couchbase/client/${client}/maven-metadata.xml")
+
+        def versionNodes = snapshots.versioning.versions.version
+        if (versionNodes == null || versionNodes.size() == 0) {
+            throw new RuntimeException("No snapshot versions found for ${client} at ${SNAPSHOT_REPO_BASE}")
         }
 
         // "latest" doesn't look up to date so assuming list will always be time-ordered
-        def lastSnapshot = snapshots.versioning.versions.childNodes()[snapshots.versioning.versions.childNodes().size() - 1].text()
+        def lastSnapshot = versionNodes[versionNodes.size() - 1].text()
 
-        def artifactXml = null
-        try {
-            artifactXml = NetworkUtil.readXml("https://${host}/content/repositories/snapshots/com/couchbase/client/${client}/${lastSnapshot}/maven-metadata.xml")
-        }
-        catch (Throwable err) {
-            throw new RuntimeException("Unable to fetch artifact metadata for ${client} ${lastSnapshot} from https://${host}", err)
-        }
+        def artifactXml = NetworkUtil.readXml("${SNAPSHOT_REPO_BASE}/com/couchbase/client/${client}/${lastSnapshot}/maven-metadata.xml")
 
         // "20220715.074746-6"
-        def timestamp = artifactXml.versioning.snapshot.timestamp
-        def builderNumber = artifactXml.versioning.snapshot.buildNumber
+        def timestamp = artifactXml.versioning.snapshot.timestamp.text()
+        def builderNumber = artifactXml.versioning.snapshot.buildNumber.text()
+        if (!timestamp || !builderNumber) {
+            throw new RuntimeException("Snapshot metadata missing timestamp/buildNumber for ${client} ${lastSnapshot}")
+        }
         def version = ImplementationVersion.from(lastSnapshot)
-        def out = ImplementationVersion.from("${version.major}.${version.minor}.${version.patch}-${timestamp}-${builderNumber}")
-        return out
+        return ImplementationVersion.from("${version.major}.${version.minor}.${version.patch}-${timestamp}-${builderNumber}")
     }
 
     @Memoized

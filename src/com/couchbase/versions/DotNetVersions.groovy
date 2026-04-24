@@ -1,16 +1,21 @@
 package com.couchbase.versions
 
-import com.couchbase.tools.network.NetworkUtil
+import groovy.transform.CompileStatic
 import groovy.transform.Memoized
 
 
+@CompileStatic
 class DotNetVersions {
     private final static String REPO = "couchbase/couchbase-net-client"
     private final static String BRANCH = "master"
 
     @Memoized
-    static String getLatestSha() {
-        return GithubVersions.getLatestSha(REPO, BRANCH)
+    static SnapshotVersion getLatestSnapshot() {
+        def allReleases = GithubVersions.getRecentReleases(REPO)
+        def highest = ImplementationVersion.highest(allReleases)
+        String sha = GithubVersions.getLatestSha(REPO, BRANCH)
+        ImplementationVersion snapshotVersion = ImplementationVersion.from("${highest.major}.${highest.minor}.${highest.patch}-${sha}")
+        return new SnapshotVersion(snapshotVersion, sha)
     }
 
     @Memoized

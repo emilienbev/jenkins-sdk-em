@@ -6,12 +6,19 @@ import groovy.transform.Memoized
 
 class NodeVersions {
     private final static String REPO = "couchbase/couchnode"
+    private final static String BRANCH = "master"
 
     @Memoized
-    static String getLatestSha() {
-        def json = NetworkUtil.readJson("https://api.github.com/repos/couchbase/couchnode/commits/master")
-        String sha = json.sha
-        return sha.substring(0, 7)
+    private static String getLatestSha() {
+        return GithubVersions.getLatestSha(REPO, BRANCH)
+    }
+
+    @Memoized
+    static SnapshotVersion getLatestSnapshot() {
+        ImplementationVersion latestRelease = GithubVersions.getLatestRelease(REPO)
+        String sha = getLatestSha()
+        ImplementationVersion snapshotVersion = ImplementationVersion.from("${latestRelease.major}.${latestRelease.minor}.${latestRelease.patch}-${sha}")
+        return new SnapshotVersion(snapshotVersion, sha)
     }
 
     @Memoized

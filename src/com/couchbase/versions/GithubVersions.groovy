@@ -45,8 +45,20 @@ class GithubSnapshotAttributes {
 }
 
 class GithubVersions {
+    // Note this only works for repos that do GitHub releases
+    static ImplementationVersion getLatestRelease(String repo) {
+        def json = NetworkUtil.readJson("https://api.github.com/repos/${repo}/releases/latest")
+        String tagName = json.tag_name
+        if (tagName != null && !tagName.trim().isEmpty()) {
+            return ImplementationVersion.from(normalizeVersionTag(tagName, null))
+        }
+        return null
+    }
+
     @Deprecated // SDKs should use getLatestShaWithDatetime so that results are chronologically sorted
     static String getLatestSha(String repo, String branch) {
+        // Test with:
+        // curl "https://api.github.com/repos/couchbase-net-client/commits/master"
         def json = NetworkUtil.readJson("https://api.github.com/repos/${repo}/commits/${branch}")
         String sha = json.sha
         return sha.substring(0, 7)
@@ -60,6 +72,8 @@ class GithubVersions {
      * definition, but is hard to achieve.
      */
     static String getLatestShaWithDatetime(String repo, String branch) {
+        // Test with:
+        // curl "https://api.github.com/repos/couchbase-net-client/commits/master"
         def json = NetworkUtil.readJson("https://api.github.com/repos/${repo}/commits/${branch}")
         String sha = json.sha
         String commitDate = json.commit.committer.date
@@ -73,6 +87,11 @@ class GithubVersions {
     }
 
     static GithubSnapshotAttributes getSnapshotAttributes(String repo, String shaOrBranch, Closure<String> versionTagNormalizer = null) {
+        def fastPath = getSnapshotAttributesFastPath(repo, shaOrBranch, versionTagNormalizer)
+        if (fastPath != null) {
+            return fastPath
+        }
+
         var tags = new HashMap<String, ImplementationVersion>()
         for (var it : getAllReleasesWithCommitSha(repo, versionTagNormalizer)) {
             if (!tags.containsKey(it.getV1()) || it.getV2() > tags.get(it.getV1())) {
@@ -106,6 +125,33 @@ class GithubVersions {
             url = parseLinkHeaderForNext(commitsConnection)
         }
         throw new RuntimeException("Could not find the nearest tag for ${shaOrBranch} in ${repo}")
+    }
+
+    private static GithubSnapshotAttributes getSnapshotAttributesFastPath(String repo, String shaOrBranch, Closure<String> versionTagNormalizer = null) {
+        try {
+            def releaseJson = NetworkUtil.readJson("https://api.github.com/repos/${repo}/releases/latest")
+            String tagName = releaseJson.tag_name
+            if (tagName == null || tagName.trim().isEmpty()) {
+                return null
+            }
+
+            ImplementationVersion latestRelease = ImplementationVersion.from(normalizeVersionTag(tagName, versionTagNormalizer))
+            def compareJson = NetworkUtil.readJson("https://api.github.com/repos/${repo}/compare/${tagName}...${shaOrBranch}")
+            String status = compareJson.status
+
+            // If the latest release tag isn't an ancestor of the target, use the slower fallback path.
+            if ("behind".equalsIgnoreCase(status) || "diverged".equalsIgnoreCase(status)) {
+                return null
+            }
+
+            int commitsSinceRelease = (compareJson.ahead_by ?: 0) as int
+            def headJson = NetworkUtil.readJson("https://api.github.com/repos/${repo}/commits/${shaOrBranch}")
+            String snapshotSha = headJson.sha.substring(0, 7)
+            return new GithubSnapshotAttributes(snapshotSha, latestRelease, commitsSinceRelease)
+        }
+        catch (Throwable ignored) {
+            return null
+        }
     }
 
     static GithubSnapshotAttributes getSnapshotAttributesUsingReferenceCommit(
@@ -143,8 +189,18 @@ class GithubVersions {
         return getAllReleasesWithCommitSha(repo, versionTagNormalizer).stream().map(Tuple2::getV2).collect(Collectors.toSet())
     }
 
-    private static Set<Tuple2<String, ImplementationVersion>> getAllReleasesWithCommitSha(String repo, Closure<String> versionTagNormalizer = null) {
+    // getAllReleases is contributing to Github API 403s.  This more optimised version fetches only the most recent
+    // page of tags, which is suitable for some use-cases such as finding the latest snapshot.
+    static Set<ImplementationVersion> getRecentReleases(String repo, Closure<String> versionTagNormalizer = null) {
+        return getAllReleasesWithCommitSha(repo, versionTagNormalizer, true).stream().map(Tuple2::getV2).collect(Collectors.toSet())
+    }
+
+    private static Set<Tuple2<String, ImplementationVersion>> getAllReleasesWithCommitSha(String repo,
+                                                                                          Closure<String> versionTagNormalizer = null,
+                                                                                          boolean firstPageOnly = false) {
         def out = new HashSet<Tuple2<String, ImplementationVersion>>();
+        // Test with:
+        // curl "https://api.github.com/repos/couchbase-net-client/tags"
         def baseUrl = "https://api.github.com/repos/${repo}/tags"
         def nextUrl = baseUrl
 
@@ -165,6 +221,10 @@ class GithubVersions {
                 } catch (e) {
                     System.err.println("Failed to add ${repo} version ${doc}: ${e}")
                 }
+            }
+
+            if (firstPageOnly) {
+                break
             }
         }
 
@@ -191,5 +251,13 @@ class GithubVersions {
             err.printStackTrace()
             throw new RuntimeException("Unable to parse headers from ${connection.getHeaderFields()}")
         }
+    }
+
+    private static String normalizeVersionTag(String tagName, Closure<String> versionTagNormalizer = null) {
+        String normalizedTag = versionTagNormalizer != null ? versionTagNormalizer.call(tagName) : tagName
+        if (normalizedTag != null && normalizedTag.toLowerCase().startsWith("v")) {
+            normalizedTag = normalizedTag.substring(1)
+        }
+        return normalizedTag
     }
 }

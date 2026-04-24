@@ -62,8 +62,8 @@ class Execute {
         return get.getInputStream().getText()
     }
 
-    static void modifyConfig(StageContext ctx, PerfConfig config) {
-        List< PerfConfig.Implementation> implementationsToAdd = new ArrayList<>()
+    static void modifyConfigImplementations(StageContext ctx, PerfConfig config) {
+        List<PerfConfig.Implementation> implementationsToAdd = new ArrayList<>()
 
         config.matrix.implementations.forEach(implementation -> {
             if (implementation.version() == "main" || implementation.version() == "master") {
@@ -99,12 +99,9 @@ class Execute {
                     }
                 }
                 else if (implementation.language == ".NET") {
-                    def sha = DotNetVersions.getLatestSha()
-                    def allReleases = DotNetVersions.getAllReleases()
-                    def highest = ImplementationVersion.highest(allReleases)
-                    ctx.env.log("Found latest sha for Dotnet: ${sha}")
-                    String version = highest.toString() + "-" + sha
-                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, version, null, sha, true))
+                    def snapshot = DotNetVersions.getLatestSnapshot()
+                    ctx.env.log("Found latest snapshot for Dotnet: ${snapshot}")
+                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, snapshot.version.toString(), null, snapshot.sha, true))
                 }
                 else if (implementation.language == "Go") {
                     def snapshot = GoVersions.getLatestGoModEntry()
@@ -116,40 +113,29 @@ class Execute {
                     }
                 }
                 else if (implementation.language == "Python") {
-                    def sha = PythonVersions.getLatestSha()
-                    def allReleases = PythonVersions.getAllReleases()
-                    def highest = ImplementationVersion.highest(allReleases)
-                    ctx.env.log("Found latest sha for Python: ${sha}")
-                    String version = PythonVersions.formatSnapshotVersion(highest, sha)
-                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, version, null, sha.split("\\+").last(), true))
+                    def snapshot = PythonVersions.getLatestSnapshot()
+                    ctx.env.log("Found latest snapshot for Python: ${snapshot}")
+                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, snapshot.version.toString(), null, snapshot.sha, true))
                 }
                 else if (implementation.language == "Node") {
-                    def sha = NodeVersions.getLatestSha()
-                    def allReleases = NodeVersions.getAllReleases()
-                    def highest = ImplementationVersion.highest(allReleases)
-                    ctx.env.log("Found latest sha for Node: ${sha}")
-                    String version = highest.toString() + "-" + sha
-                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, version, null, sha, true))
+                    def snapshot = NodeVersions.getLatestSnapshot()
+                    ctx.env.log("Found latest snapshot for Node: ${snapshot}")
+                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, snapshot.version.toString(), null, snapshot.sha, true))
                 }
                 else if (implementation.language == "C++") {
-                    def version = CppVersions.getLatestSnapshot()
-                    ctx.env.log("Found latest snapshot for C++: ${version}")
-                    def sha = (version.snapshot != null && version.snapshot.contains('+')) ? version.snapshot.split("\\+").last() : null
-                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, version.toString(), null, sha, true))
+                    def snapshot = CppVersions.getLatestSnapshot()
+                    ctx.env.log("Found latest snapshot for C++: ${snapshot}")
+                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, snapshot.version.toString(), null, snapshot.sha, true))
                 }
                 else if (implementation.language == "Ruby") {
-                    def sha = RubyVersions.getLatestSha()
-                    def allReleases = RubyVersions.getAllReleases()
-                    def highest = ImplementationVersion.highest(allReleases)
-                    ctx.env.log("Found latest sha for Ruby: ${sha}")
-                    String version = RubyVersions.formatSnapshotVersion(highest, sha)
-                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, version, null, sha.split("\\+").last(), true))
+                    def snapshot = RubyVersions.getLatestSnapshot()
+                    ctx.env.log("Found latest snapshot for Ruby: ${snapshot}")
+                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, snapshot.version.toString(), null, snapshot.sha, true))
                 }
                 else if (implementation.language == "Rust") {
-                    def version = RustVersions.getLatestSnapshot()
-                    def sha = (version.snapshot != null && version.snapshot.contains('+')) ? version.snapshot.split("\\+").last() : null
-                    ctx.env.log("Found latest snapshot for Rust: ${version}")
-                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, version.toString(), null, sha, true))
+                    def snapshot = RustVersions.getLatestSnapshot()
+                    ctx.env.log("Found latest snapshot for Rust: ${snapshot}")
+                    implementationsToAdd.add(new PerfConfig.Implementation(implementation.language, snapshot.version.toString(), null, snapshot.sha, true))
                 }
                 else {
                     throw new UnsupportedOperationException("Cannot support snapshot builds with language ${implementation.language} yet")
@@ -184,7 +170,9 @@ class Execute {
             config.matrix.implementations.addAll(implementationsToAdd)
         }
         ctx.env.log("Added ${implementationsToAdd} snapshot or range versions")
+    }
 
+    static void modifyConfigClusters(StageContext ctx, PerfConfig config) {
         config.matrix.clusters.forEach(cluster -> {
 
             String hostnameRest = cluster.hostname_rest
@@ -233,6 +221,11 @@ class Execute {
                 throw err
             }
         })
+    }
+
+    static void modifyConfig(StageContext ctx, PerfConfig config) {
+        modifyConfigImplementations(ctx, config)
+        modifyConfigClusters(ctx, config)
     }
 
     static Map<PerfConfig.Cluster, List<Run>> parseConfig2(StageContext ctx, List<RunFromDb> fromDb) {

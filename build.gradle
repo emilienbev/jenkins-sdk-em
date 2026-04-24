@@ -3,7 +3,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.github.jengelman.gradle.plugins:shadow:5.2.0'
+        classpath 'com.gradleup.shadow:shadow-gradle-plugin:8.3.10'
     }
 
 }
@@ -19,7 +19,7 @@ java {
     }
 }
 
-apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'com.gradleup.shadow'
 
 group 'org.example'
 version '1.0-SNAPSHOT'
@@ -91,4 +91,22 @@ task listSdkVersions(type: JavaExec) {
     description = "List available versions for a given SDK"
     classpath = sourceSets.main.runtimeClasspath
     main = "com.couchbase.tools.versions.ListSdkVersions"
+}
+
+task listSnapshotVersions(type: JavaExec) {
+    group = "Execution"
+    description = "List latest snapshot versions for all SDKs"
+    classpath = sourceSets.main.runtimeClasspath
+    main = "com.couchbase.tools.versions.ListSnapshotVersions"
+}
+
+task countRuns(type: JavaExec) {
+    group = "Execution"
+    description = "Analyse a FIT perf config YAML and write an HTML run-count report. Pass -Pconfig=<path> [-Poutput=<path>]"
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = "com.couchbase.perf.shared.main.CountRuns"
+    args = [
+        project.findProperty('config') ?: 'config/job-config.yaml',
+        project.findProperty('output') ?: 'run-count-report.html',
+    ]
 }

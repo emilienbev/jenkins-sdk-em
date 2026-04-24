@@ -1,7 +1,9 @@
 package com.couchbase.versions
 
+import groovy.transform.CompileStatic
 import groovy.transform.Memoized
 
+@CompileStatic
 class CppVersions {
     private final static String REPO = "couchbase/couchbase-cxx-client"
     private final static String BRANCH = "main"
@@ -13,8 +15,10 @@ class CppVersions {
     }
 
     @Memoized
-    static ImplementationVersion getLatestSnapshot() {
-        return getSnapshot(BRANCH, true) // The next release on main is now always a dot-minor.
+    static SnapshotVersion getLatestSnapshot() {
+        def snapshot = getSnapshot(BRANCH, true) // The next release on main is now always a dot-minor.
+        String sha = (snapshot.snapshot != null && snapshot.snapshot.contains('+')) ? snapshot.snapshot.split("\\+").last() : null
+        return new SnapshotVersion(snapshot, sha)
     }
 
     static ImplementationVersion getSnapshot(String shaOrBranch, boolean nextReleaseIsDotMinor) {
